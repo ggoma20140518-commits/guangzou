@@ -931,9 +931,39 @@ elif page == "PPT 다운로드":
                 cell.text_frame.paragraphs[0].text = str(text)
 
             def fig_to_image(fig, width=800, height=400):
-                """Plotly 차트를 PNG 이미지로 변환"""
-                img_bytes = fig.to_image(format="png", width=width, height=height, scale=2)
-                return BytesIO(img_bytes)
+                """Plotly 차트를 PNG 이미지로 변환 (kaleido 실패 시 matplotlib 폴백)"""
+                try:
+                    img_bytes = fig.to_image(format="png", width=width, height=height, scale=2)
+                    return BytesIO(img_bytes)
+                except Exception:
+                    # kaleido/Chrome 없는 환경 (Streamlit Cloud 등) → matplotlib 폴백
+                    import matplotlib
+                    matplotlib.use("Agg")
+                    import matplotlib.pyplot as plt
+                    import matplotlib.font_manager as fm
+                    buf = BytesIO()
+                    fig_mpl = fig.to_dict()
+                    mpl_fig, ax = plt.subplots(figsize=(width/100, height/100), dpi=150)
+                    # 간단한 바 차트 렌더링
+                    traces = fig_mpl.get("data", [])
+                    x_all = []
+                    for t in traces:
+                        if t.get("type") == "bar" and t.get("x") and t.get("y"):
+                            x_labels = list(t["x"])
+                            x_all = x_labels
+                            ax.bar(x_labels, list(t["y"]), label=t.get("name", ""), alpha=0.8)
+                        elif t.get("type") == "pie":
+                            labels = list(t.get("labels", []))
+                            values = list(t.get("values", []))
+                            ax.pie(values, labels=labels, autopct="%1.0f%%")
+                    if x_all:
+                        ax.legend(fontsize=7)
+                    ax.set_ylabel(fig_mpl.get("layout", {}).get("yaxis", {}).get("title", {}).get("text", ""))
+                    plt.tight_layout()
+                    plt.savefig(buf, format="png", bbox_inches="tight")
+                    plt.close(mpl_fig)
+                    buf.seek(0)
+                    return buf
 
             def growth_pct(cur, prev):
                 if prev and prev != 0:
