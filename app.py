@@ -936,29 +936,45 @@ elif page == "PPT 다운로드":
                     img_bytes = fig.to_image(format="png", width=width, height=height, scale=2)
                     return BytesIO(img_bytes)
                 except Exception:
-                    # kaleido/Chrome 없는 환경 (Streamlit Cloud 등) → matplotlib 폴백
                     import matplotlib
                     matplotlib.use("Agg")
                     import matplotlib.pyplot as plt
-                    import matplotlib.font_manager as fm
+                    import numpy as np
                     buf = BytesIO()
-                    fig_mpl = fig.to_dict()
+                    fig_d = fig.to_dict()
+                    traces = fig_d.get("data", [])
+                    is_pie = any(t.get("type") == "pie" for t in traces)
                     mpl_fig, ax = plt.subplots(figsize=(width/100, height/100), dpi=150)
-                    # 간단한 바 차트 렌더링
-                    traces = fig_mpl.get("data", [])
-                    x_all = []
-                    for t in traces:
-                        if t.get("type") == "bar" and t.get("x") and t.get("y"):
-                            x_labels = list(t["x"])
-                            x_all = x_labels
-                            ax.bar(x_labels, list(t["y"]), label=t.get("name", ""), alpha=0.8)
-                        elif t.get("type") == "pie":
-                            labels = list(t.get("labels", []))
-                            values = list(t.get("values", []))
-                            ax.pie(values, labels=labels, autopct="%1.0f%%")
-                    if x_all:
-                        ax.legend(fontsize=7)
-                    ax.set_ylabel(fig_mpl.get("layout", {}).get("yaxis", {}).get("title", {}).get("text", ""))
+                    if is_pie:
+                        for t in traces:
+                            if t.get("type") == "pie":
+                                labels = [str(l) for l in t.get("labels", [])]
+                                values = [float(v) for v in t.get("values", [])]
+                                colors = []
+                                mc = t.get("marker", {}).get("colors", [])
+                                if mc:
+                                    colors = list(mc)
+                                ax.pie(values, labels=labels, autopct="%1.0f%%", colors=colors if colors else None)
+                                break
+                    else:
+                        bar_count = sum(1 for t in traces if t.get("type") == "bar")
+                        bar_i = 0
+                        for t in traces:
+                            if t.get("type") == "bar" and t.get("x") and t.get("y"):
+                                x_labels = [str(x) for x in t["x"]]
+                                y_vals = [float(y) if y else 0 for y in t["y"]]
+                                x_pos = np.arange(len(x_labels))
+                                bw = 0.8 / max(bar_count, 1)
+                                offset = (bar_i - bar_count/2 + 0.5) * bw
+                                ax.bar(x_pos + offset, y_vals, bw, label=t.get("name", ""), alpha=0.85)
+                                bar_i += 1
+                                ax.set_xticks(x_pos)
+                                ax.set_xticklabels(x_labels, fontsize=7)
+                        if bar_i > 0:
+                            ax.legend(fontsize=7)
+                        ytitle = fig_d.get("layout", {}).get("yaxis", {}).get("title", {})
+                        if isinstance(ytitle, dict):
+                            ax.set_ylabel(ytitle.get("text", ""), fontsize=8)
                     plt.tight_layout()
                     plt.savefig(buf, format="png", bbox_inches="tight")
                     plt.close(mpl_fig)
