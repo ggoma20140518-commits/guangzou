@@ -941,40 +941,34 @@ elif page == "PPT 다운로드":
                     import matplotlib.pyplot as plt
                     import numpy as np
                     buf = BytesIO()
-                    fig_d = fig.to_dict()
-                    traces = fig_d.get("data", [])
-                    is_pie = any(t.get("type") == "pie" for t in traces)
+                    # fig.data에서 직접 trace 읽기 (Plotly 6.x 호환)
+                    is_pie = any(t.type == "pie" for t in fig.data)
                     mpl_fig, ax = plt.subplots(figsize=(width/100, height/100), dpi=150)
-                    if is_pie:
-                        for t in traces:
-                            if t.get("type") == "pie":
-                                labels = [str(l) for l in t.get("labels", [])]
-                                values = [float(v) for v in t.get("values", [])]
-                                colors = []
-                                mc = t.get("marker", {}).get("colors", [])
-                                if mc:
-                                    colors = list(mc)
-                                ax.pie(values, labels=labels, autopct="%1.0f%%", colors=colors if colors else None)
-                                break
-                    else:
-                        bar_count = sum(1 for t in traces if t.get("type") == "bar")
-                        bar_i = 0
-                        for t in traces:
-                            if t.get("type") == "bar" and t.get("x") and t.get("y"):
-                                x_labels = [str(x) for x in t["x"]]
-                                y_vals = [float(y) if y else 0 for y in t["y"]]
+                    try:
+                        if is_pie:
+                            for t in fig.data:
+                                if t.type == "pie":
+                                    labels = [str(l) for l in t.labels]
+                                    values = [float(v) for v in t.values]
+                                    ax.pie(values, labels=labels, autopct="%1.0f%%")
+                                    break
+                        else:
+                            bar_traces = [t for t in fig.data if t.type == "bar"]
+                            n_bars = len(bar_traces)
+                            for bi, t in enumerate(bar_traces):
+                                x_labels = [str(x) for x in t.x]
+                                y_vals = [float(y) if y is not None else 0 for y in t.y]
                                 x_pos = np.arange(len(x_labels))
-                                bw = 0.8 / max(bar_count, 1)
-                                offset = (bar_i - bar_count/2 + 0.5) * bw
-                                ax.bar(x_pos + offset, y_vals, bw, label=t.get("name", ""), alpha=0.85)
-                                bar_i += 1
-                                ax.set_xticks(x_pos)
+                                bw = 0.8 / max(n_bars, 1)
+                                offset = (bi - n_bars/2 + 0.5) * bw
+                                ax.bar(x_pos + offset, y_vals, bw, label=t.name or "", alpha=0.85)
+                            if bar_traces:
+                                x_labels = [str(x) for x in bar_traces[0].x]
+                                ax.set_xticks(np.arange(len(x_labels)))
                                 ax.set_xticklabels(x_labels, fontsize=7)
-                        if bar_i > 0:
-                            ax.legend(fontsize=7)
-                        ytitle = fig_d.get("layout", {}).get("yaxis", {}).get("title", {})
-                        if isinstance(ytitle, dict):
-                            ax.set_ylabel(ytitle.get("text", ""), fontsize=8)
+                                ax.legend(fontsize=7)
+                    except Exception:
+                        ax.text(0.5, 0.5, "Chart", ha="center", va="center", fontsize=14, color="#999")
                     plt.tight_layout()
                     plt.savefig(buf, format="png", bbox_inches="tight")
                     plt.close(mpl_fig)
