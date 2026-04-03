@@ -1097,27 +1097,30 @@ elif page == "PPT 다운로드":
                 sp = chart_shape._element
                 sp.getparent().remove(sp)
 
-                # 법인별 1Q 매출 비교 차트 (TOTAL, GZ, YSGB)
-                entities = ["TOTAL", "GZ", "YSGB"]
-                colors_bar = ["#203864", "#2980B9", "#27AE60"]
-                vals_1q = [entity_data[e]["예상실적"][3] / 1000 for e in entities]
-                prev_1q = [entity_data[e]["25년매출"][3] / 1000 for e in entities]
-                plan_1q = [entity_data[e]["사업계획"][3] / 1000 for e in entities]
+                # 법인별 매출 비교 → python-pptx 네이티브 바 차트
+                from pptx.chart.data import CategoryChartData
+                from pptx.enum.chart import XL_CHART_TYPE
 
-                fig_chart = go.Figure()
-                fig_chart.add_trace(go.Bar(name="25년 동기", x=entities, y=prev_1q,
-                                           marker_color="#B0B0B0", opacity=0.6))
-                fig_chart.add_trace(go.Bar(name="사업계획", x=entities, y=plan_1q,
-                                           marker_color="#A0C4E8", opacity=0.6))
-                fig_chart.add_trace(go.Bar(name="26년 예상실적", x=entities, y=vals_1q,
-                                           marker_color="#203864"))
-                fig_chart.update_layout(
-                    barmode="group", yaxis_title="백만 RMB",
-                    margin=dict(l=50, r=20, t=20, b=40),
-                    font=dict(size=12), plot_bgcolor="white",
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                chart_data = CategoryChartData()
+                entities = ["TOTAL", "GZ", "YSGB"]
+                chart_data.categories = entities
+                chart_data.add_series("25년 동기", [round(entity_data[e]["25년매출"][current_q_idx] / 1000) for e in entities])
+                chart_data.add_series("사업계획", [round(entity_data[e]["사업계획"][current_q_idx] / 1000) for e in entities])
+                chart_data.add_series("26년 예상실적", [round(entity_data[e]["예상실적"][current_q_idx] / 1000) for e in entities])
+
+                chart_frame = slide2.shapes.add_chart(
+                    XL_CHART_TYPE.COLUMN_CLUSTERED, cl, ct, cw, ch_, chart_data
                 )
-                slide2.shapes.add_picture(fig_to_image(fig_chart, 600, 500), cl, ct, cw, ch_)
+                chart = chart_frame.chart
+                chart.has_legend = True
+                chart.legend.include_in_layout = False
+
+                # 시리즈 색상
+                bar_colors = [RGBColor(0xB0, 0xB0, 0xB0), RGBColor(0xA0, 0xC4, 0xE8), RGBColor(0x20, 0x38, 0x64)]
+                for si, color in enumerate(bar_colors):
+                    series = chart.series[si]
+                    series.format.fill.solid()
+                    series.format.fill.fore_color.rgb = color
 
             # ════════════════════════════════════
             # 슬라이드 3: TOP 30 고객사 실적
@@ -1344,35 +1347,53 @@ elif page == "PPT 다운로드":
                 if s:
                     set_text_keep_format(s, "")
 
-            # 가운데 파이 차트 → 이미지로 교체
+            # 가운데 파이 차트 → python-pptx 네이티브 도넛 차트로 교체
             chart_s4 = None
             for s in slide4.shapes:
                 if s.shape_type == 3:
                     chart_s4 = s
                     break
             if chart_s4:
-                cl, ct, cw, ch_ = chart_s4.left, chart_s4.top, chart_s4.width, chart_s4.height
                 sp = chart_s4._element
                 sp.getparent().remove(sp)
 
-                ch_pie_data = pd.DataFrame([
-                    {"채널": ch, "매출": channel_1q[ch]["sales"]}
-                    for ch in ["온라인", "왕홍", "오프라인", "수출"]
-                ])
-                ppt_ch_colors = {"온라인": "#223862", "왕홍": "#BE0201", "오프라인": "#555555", "수출": "#D1D6E7"}
-                fig_pie = px.pie(ch_pie_data, names="채널", values="매출",
-                                 color="채널", color_discrete_map=ppt_ch_colors, hole=0.4)
-                fig_pie.update_traces(textposition="inside", textinfo="label+percent", textfont_size=13)
-                fig_pie.update_layout(
-                    title=dict(text="채널별 매출 비중", font=dict(size=14, color="#1F2937"), x=0.5, y=0.55),
-                    showlegend=True,
-                    legend=dict(orientation="h", yanchor="top", y=-0.02, xanchor="center", x=0.5, font=dict(size=10)),
-                    margin=dict(l=5, r=5, t=5, b=40), font=dict(size=12),
-                )
-                # 타원(2968468x2968468) 안에 맞추기: 타원 위치 기준으로 센터링
+                # python-pptx 네이티브 도넛 차트 생성
+                from pptx.chart.data import CategoryChartData
+                from pptx.enum.chart import XL_CHART_TYPE
+                from pptx.oxml.ns import qn as pptx_qn
+
+                chart_data = CategoryChartData()
+                ch_names = ["온라인", "왕홍", "오프라인", "수출"]
+                ch_values = [channel_1q[ch]["sales"] for ch in ch_names]
+                chart_data.categories = ch_names
+                chart_data.add_series("매출", ch_values)
+
                 oval_left, oval_top, oval_size = 4612920, 2418073, 2968468
-                slide4.shapes.add_picture(fig_to_image(fig_pie, 500, 500),
-                    Emu(oval_left), Emu(oval_top), Emu(oval_size), Emu(oval_size))
+                chart_frame = slide4.shapes.add_chart(
+                    XL_CHART_TYPE.DOUGHNUT, Emu(oval_left), Emu(oval_top), Emu(oval_size), Emu(oval_size), chart_data
+                )
+                chart = chart_frame.chart
+                chart.has_legend = True
+                chart.legend.include_in_layout = False
+
+                # 색상 적용 (원본 PPT와 동일)
+                ppt_colors = [RGBColor(0x22, 0x38, 0x62), RGBColor(0xBE, 0x02, 0x01),
+                              RGBColor(0x55, 0x55, 0x55), RGBColor(0xD1, 0xD6, 0xE7)]
+                plot = chart.plots[0]
+                series = plot.series[0]
+                for i, color in enumerate(ppt_colors):
+                    pt = series.points[i]
+                    pt.format.fill.solid()
+                    pt.format.fill.fore_color.rgb = color
+
+                # 데이터 레이블 (퍼센트 표시)
+                plot.has_data_labels = True
+                data_labels = plot.data_labels
+                data_labels.show_percentage = True
+                data_labels.show_category_name = True
+                data_labels.show_value = False
+                data_labels.font.size = Pt(9)
+                data_labels.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
 
             # ════════════════════════════════════
             # 슬라이드 5: 신규 성장 프로젝트 → 양식 유지, 내용 공란
