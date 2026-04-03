@@ -1368,13 +1368,17 @@ elif page == "PPT 다운로드":
                 chart_data.categories = ch_names
                 chart_data.add_series("매출", ch_values)
 
+                # 원형 틀 안에 딱 맞게 배치 (여백 포함)
                 oval_left, oval_top, oval_size = 4612920, 2418073, 2968468
+                margin = 100000  # 여백
                 chart_frame = slide4.shapes.add_chart(
-                    XL_CHART_TYPE.DOUGHNUT, Emu(oval_left), Emu(oval_top), Emu(oval_size), Emu(oval_size), chart_data
+                    XL_CHART_TYPE.DOUGHNUT,
+                    Emu(oval_left + margin), Emu(oval_top + margin),
+                    Emu(oval_size - margin * 2), Emu(oval_size - margin * 2),
+                    chart_data
                 )
                 chart = chart_frame.chart
-                chart.has_legend = True
-                chart.legend.include_in_layout = False
+                chart.has_legend = False  # 범례 끄기 (원본 PPT에 별도 범례 텍스트 있음)
 
                 # 색상 적용 (원본 PPT와 동일)
                 ppt_colors = [RGBColor(0x22, 0x38, 0x62), RGBColor(0xBE, 0x02, 0x01),
@@ -1386,13 +1390,13 @@ elif page == "PPT 다운로드":
                     pt.format.fill.solid()
                     pt.format.fill.fore_color.rgb = color
 
-                # 데이터 레이블 (퍼센트 표시)
+                # 데이터 레이블 (퍼센트만, 카테고리명은 원본 범례에서 표시)
                 plot.has_data_labels = True
                 data_labels = plot.data_labels
                 data_labels.show_percentage = True
-                data_labels.show_category_name = True
+                data_labels.show_category_name = False
                 data_labels.show_value = False
-                data_labels.font.size = Pt(9)
+                data_labels.font.size = Pt(8)
                 data_labels.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
 
             # ════════════════════════════════════
